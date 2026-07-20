@@ -219,7 +219,7 @@ def print_banner():
         os.system('clear')
     terminal_width = shutil.get_terminal_size((100, 20)).columns
     f = Figlet(font='big', width=terminal_width)
-    banner_text = "DK3Y Wallet Scanner Bot"
+    banner_text = "DK3Y Wallet Analyzer Bot"
     banner = f.renderText(banner_text)
     init(autoreset=True)
     colors = [
@@ -368,7 +368,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await log_command(context.application, user.id, "start")
         
         welcome_msg = (
-            "🚀 *DK3Y Wallet Scanner*\n"
+            "🚀 *DK3Y Wallet Analyzer*\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "✨ *Enhanced Features:*\n"
             "• 🚀 Real-time price data & market metrics\n"
@@ -407,7 +407,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await increment_user_interaction(update.effective_user.id, 'command')
         
         help_text = (
-            "❓ *DK3Y Wallet Scanner Help*\n"
+            "❓ *DK3Y Wallet Analyzer Help*\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "👋 *Getting Started:*\n"
             "Simply send any Solana or Ethereum wallet address to the bot\\. I will automatically detect the chain and provide a detailed analysis of the holdings\\.\n\n"
@@ -416,7 +416,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "• `/help` \\- Show this help message\n"
             "• `/status` \\- Check if the bot is online\n\n"
             "✨ *Pro Tips:*\n"
-            "• You can send multiple addresses at once (one per line) for batch scanning\\.\n"
+            "• You can send multiple addresses at once (one per line) for batch analysis\\.\n"
             "• Use the **Refresh** button on any report to get latest price data\\.\n"
             "• Only tokens worth more than **$0\\.01** are shown in the detailed list to keep things clean\\."
         )
@@ -654,7 +654,7 @@ async def create_enhanced_solana_analysis(wallet_address: str, progress_callback
                 
                 token_msg += f"#{escape_markdown(str(rank))} *{escape_markdown(display_name)}* (`{escape_markdown(token['symbol'])}`)\n"
                 token_msg += f"📊 *Balance:* `{escape_markdown(format_large_number(token['balance']))}`\n"
-                token_msg += f"💰 *Value:* `${escape_markdown(f'{token['token_usd_value']:,.2f}')}`\n"
+                token_msg += f"💰 *Value:* `${escape_markdown(format(token['token_usd_value'], ',.2f'))}`\n"
                 
                 extras = []
                 if token['market_cap']:
@@ -867,7 +867,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "about":
         about_msg = (
-            "🤖 *DK3Y Wallet Scanner *\n\n"
+            "🤖 *DK3Y Wallet Analyzer*\n\n"
             "👤 *Developer:* [dk3yyyy](https://github.com/dk3yyyy)\n\n"
             "🛠️ *Built with:*\n"
             "• 🐍 Python + python-telegram-bot\n"
@@ -886,7 +886,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif query.data == "back":
         welcome_msg = (
-            "🚀 *DK3Y Wallet Scanner*\n"
+            "🚀 *DK3Y Wallet Analyzer*\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "✨ *Enhanced Features:*\n"
             "• 🚀 Real-time price data & market metrics\n"
@@ -970,7 +970,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     print_banner()
     print("\n" * 3)
-    print("🚀 DK3Y Wallet Scanner Bot is starting...\n")
+    print("🚀 DK3Y Wallet Analyzer Bot is starting...\n")
     
     if not TELEGRAM_TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not found in environment variables")
