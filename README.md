@@ -1,14 +1,14 @@
-# 🚀 DK3Y Wallet Scanner Bot
+# 🚀 DK3Y Wallet Analyzer
 
-A professional Telegram bot for analyzing Solana and Ethereum wallets with real-time market data, portfolio analytics, and admin user tracking.
+An async Telegram bot that validates Solana and Ethereum addresses, reports native balances and USD values, and provides detailed SPL-token portfolio analytics for Solana wallets.
 
 ## ✨ Features
 
 ### 🎯 **Core Features**
 
-- **Multi-chain Support**: Analyze Solana & Ethereum wallets
-- **Real-time Data**: Live prices from CoinGecko & DexScreener  
-- **Portfolio Analytics**: Token allocation, market metrics, dust filtering
+- **Two-chain Support**: Analyze Solana and Ethereum addresses
+- **Real-time Data**: Native-asset prices from CoinGecko and Solana token market data from DexScreener
+- **Solana Portfolio Analytics**: SPL-token allocation, market metrics, and dust filtering
 - **Interactive UI**: Pagination, progress indicators, explorer links
 
 ### 👑 **Admin Features**
@@ -32,8 +32,8 @@ A professional Telegram bot for analyzing Solana and Ethereum wallets with real-
 ### 2. **Installation**
 
 ```bash
-git clone <your-repo>
-cd wscan
+git clone https://github.com/dk3yyyy/sol-eth-wallet-analyzer.git
+cd sol-eth-wallet-analyzer
 pip install -r requirements.txt
 ```
 
@@ -85,12 +85,12 @@ Send any wallet address:
 - **Solana**: `11111112D4FgiiiikjQKNNh4rJN4rENWDCK8`
 - **Ethereum**: `0x742d35Cc6634C0532925a3b8D4037C973B26Ed33`
 
-Bot auto-detects wallet type and provides:
+The bot auto-detects the address type and provides:
 
-- Balance & USD value
-- Token holdings with market data
-- Portfolio allocation percentages
-- Interactive navigation for large portfolios
+- Native SOL or ETH balance and estimated USD value
+- SPL-token holdings and market data for Solana addresses
+- Solana portfolio allocation percentages
+- Interactive navigation for large Solana portfolios
 
 ## 🔧 Configuration
 
@@ -152,4 +152,4 @@ If you'd like to support the project, you can send tips to any of the following 
 
 ---
 
-*Professional wallet analysis for Solana & Ethereum with admin tracking features.*
+*Solana and Ethereum balance analysis with detailed SPL-token portfolio insights.*
