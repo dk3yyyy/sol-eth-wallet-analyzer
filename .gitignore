@@ -1,17 +1,14 @@
-# .gitignore for Solana/Ethereum Wallet Scanner Bot
+# Local configuration
 .env
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
 .env.*
-.DS_Store
-# Virtual environment
-.venv/
-venv/
-.env
+!.env.example
+
+# Runtime data and secrets
+user_data.json
+user_data.json.corrupt.*
+config.ini
+secrets/
+*.log
 
 # Python
 __pycache__/
@@ -19,6 +16,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.venv/
+venv/
 build/
 develop-eggs/
 dist/
@@ -35,7 +34,7 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDE
+# Editors
 .vscode/
 .idea/
 *.swp
@@ -49,12 +48,3 @@ wheels/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Logs
-*.log
-
-# API keys and sensitive data
-.env
-config.ini
-secrets/
-user_data.json
