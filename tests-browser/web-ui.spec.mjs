@@ -38,7 +38,7 @@ const holdingsResult = {
     allocation_percent: 6.3,
   },
   tokens: [
-    { mint: 'mint-beta', symbol: 'BETA', name: 'Beta Token', balance: 20, price_usd: 5, value_usd: 100, price_change_24h_percent: 2, liquidity_usd: 100000, market_url: null },
+    { mint: 'mint-beta', symbol: 'BETA', name: 'Beta Token', balance: 20, price_usd: 5, value_usd: 100, price_change_24h_percent: 2, liquidity_usd: 100000, market_url: null, logo_available: true },
     { mint: 'mint-alpha', symbol: 'ALPHA', name: 'Alpha Token', balance: 5, price_usd: 0.1, value_usd: 0.5, price_change_24h_percent: -1, liquidity_usd: 5000, market_url: null },
     { mint: 'mint-unknown', symbol: 'UNKNOWN', name: 'Unpriced Token', balance: 50, price_usd: null, value_usd: null, price_change_24h_percent: null, liquidity_usd: null, market_url: null },
   ],
@@ -113,6 +113,30 @@ test('uses no third-party runtime requests or browser storage', async ({ page })
   expect(externalRequests).toEqual([]);
   expect(await page.evaluate(() => localStorage.length)).toBe(0);
   expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+});
+
+test('renders same-origin token logos and keeps monograms as the fallback', async ({ page }) => {
+  const externalRequests = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.hostname !== '127.0.0.1') externalRequests.push(request.url());
+  });
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.route('**/api/token-logo/mint-beta', (route) => route.fulfill({
+    contentType: 'image/png',
+    body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+  }));
+
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+
+  const betaRow = page.locator('tbody tr').filter({ hasText: 'BETA' });
+  await expect(betaRow.locator('img.token-logo')).toBeVisible();
+  await expect(betaRow.locator('.asset-monogram')).toHaveCount(0);
+  const alphaRow = page.locator('tbody tr').filter({ hasText: 'ALPHA' });
+  await expect(alphaRow.locator('.asset-monogram')).toBeVisible();
+  expect(externalRequests).toEqual([]);
 });
 
 test('filters, sorts, and hides only valued dust holdings', async ({ page }) => {

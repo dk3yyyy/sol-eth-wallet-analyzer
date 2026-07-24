@@ -95,6 +95,7 @@ async def test_analyze_solana_aggregates_holdings_and_reports_partial_metadata(m
             "liquidity": 100_000,
             "price_change_24h": 4.2,
             "url": "https://dexscreener.com/solana/alpha",
+            "logo_url": "https://cdn.dexscreener.com/cms/images/alpha?format=auto",
         }
 
     monkeypatch.setattr(analyzer, "get_token_data_dexscreener", token_data)
@@ -123,6 +124,7 @@ async def test_analyze_solana_aggregates_holdings_and_reports_partial_metadata(m
             "liquidity_usd": 100_000,
             "price_change_24h_percent": 4.2,
             "market_url": "https://dexscreener.com/solana/alpha",
+            "logo_available": True,
         }
     ]
     assert result["explorer_url"] == f"https://solscan.io/account/{address}"

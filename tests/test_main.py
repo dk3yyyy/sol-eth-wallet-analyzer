@@ -41,9 +41,9 @@ async def test_registration_does_not_depend_on_admin_logging():
     assert "123" in data["users"]
 
 
-def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
+def test_dotenv_is_loaded_before_services_read_rpc_configuration(tmp_path):
     (tmp_path / ".env").write_text(
-        "TELEGRAM_TOKEN=test-token\nETHERSCAN_API_KEY=test-etherscan-key\n",
+        "TELEGRAM_TOKEN=test-token\nETHEREUM_RPC_URL=https://ethereum.example.test\n",
         encoding="utf-8",
     )
     repo = Path(__file__).resolve().parents[1]
@@ -52,9 +52,9 @@ def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
         f"sys.path.insert(0, {str(repo)!r}); "
         "import main, services; "
         "print(json.dumps({'telegram': bool(main.TELEGRAM_TOKEN), "
-        "'etherscan': bool(services.ETHERSCAN_API_KEY)}))"
+        "'ethereum_rpc': services.ETHEREUM_RPC_URL}))"
     )
-    env = {k: v for k, v in os.environ.items() if k not in {"TELEGRAM_TOKEN", "ETHERSCAN_API_KEY"}}
+    env = {k: v for k, v in os.environ.items() if k not in {"TELEGRAM_TOKEN", "ETHEREUM_RPC_URL"}}
 
     completed = subprocess.run(
         [sys.executable, "-c", code],
@@ -66,7 +66,10 @@ def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout.splitlines()[-1]) == {"telegram": True, "etherscan": True}
+    assert json.loads(completed.stdout.splitlines()[-1]) == {
+        "telegram": True,
+        "ethereum_rpc": "https://ethereum.example.test",
+    }
 
 
 @pytest.mark.asyncio

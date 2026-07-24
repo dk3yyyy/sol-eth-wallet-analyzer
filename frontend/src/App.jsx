@@ -68,6 +68,25 @@ function ArrowIcon() {
   );
 }
 
+function TokenMark({ token }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  if (!token.logo_available || logoFailed) {
+    return <span className="asset-monogram" aria-hidden="true">{token.symbol.slice(0, 2)}</span>;
+  }
+  return (
+    <img
+      className="token-logo"
+      src={`/api/token-logo/${encodeURIComponent(token.mint)}`}
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setLogoFailed(true)}
+    />
+  );
+}
+
 function InitialPanel() {
   return (
     <section className="capabilities" aria-labelledby="capabilities-title">
@@ -284,7 +303,7 @@ function PortfolioResult({ result, loading, onRefresh, onCopyShare, onAnnounce }
                     <tr key={token.mint}>
                       <td>
                         <div className="asset-cell">
-                          <span className="asset-monogram" aria-hidden="true">{token.symbol.slice(0, 2)}</span>
+                          <TokenMark token={token} />
                           <div>
                             <strong>{token.symbol}</strong>
                             <small>{token.name}</small>

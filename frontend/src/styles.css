@@ -807,17 +807,28 @@ tbody tr:last-child td {
   font-family: Inter, ui-sans-serif, sans-serif;
 }
 
-.asset-monogram {
+.asset-monogram,
+.token-logo {
   width: 34px;
   height: 34px;
-  display: grid;
+  box-sizing: border-box;
   flex: 0 0 auto;
+  border: 1px solid #2c3a50;
+}
+
+.asset-monogram {
+  display: grid;
   place-items: center;
   color: var(--cyan);
   background: #152132;
-  border: 1px solid #2c3a50;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 10px;
+}
+
+.token-logo {
+  display: block;
+  background: #152132;
+  object-fit: cover;
 }
 
 .asset-cell > div {

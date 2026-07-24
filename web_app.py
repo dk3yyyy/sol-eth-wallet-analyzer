@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from analyzer import analyze_wallet
-from services import ServiceError
+from services import ServiceError, fetch_token_logo
 
 logger = logging.getLogger(__name__)
 FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
@@ -59,6 +59,7 @@ analyze_limiter = SlidingWindowRateLimiter(
     max_requests=_positive_int_env("ANALYZE_RATE_LIMIT", 20),
     window_seconds=_positive_int_env("ANALYZE_RATE_WINDOW_SECONDS", 60),
 )
+logo_limiter = SlidingWindowRateLimiter(max_requests=120, window_seconds=60)
 
 CONTENT_SECURITY_POLICY = "; ".join(
     (
@@ -104,9 +105,20 @@ async def security_headers(request: Request, call_next):
             )
         else:
             response = await call_next(request)
+    elif request.method == "GET" and request.url.path.startswith("/api/token-logo/"):
+        client_key = request.client.host if request.client else "unknown"
+        if not logo_limiter.allow(client_key):
+            response = JSONResponse(
+                status_code=429,
+                content={"detail": "Token logo limit reached. Try again in a minute."},
+                headers={"Retry-After": str(logo_limiter.window_seconds)},
+            )
+        else:
+            response = await call_next(request)
     else:
         response = await call_next(request)
-    response.headers["Cache-Control"] = "no-store"
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
     response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -135,6 +147,22 @@ async def analyze(payload: AnalyzeRequest):
             status_code=503,
             detail="Wallet data providers are temporarily unavailable. Try again shortly.",
         ) from exc
+
+
+@app.get("/api/token-logo/{mint}")
+async def token_logo(mint: str):
+    try:
+        logo = await fetch_token_logo(mint)
+    except ServiceError:
+        logger.info("Token logo provider unavailable")
+        logo = None
+    if logo is None:
+        raise HTTPException(status_code=404, detail="Token logo unavailable.")
+    return Response(
+        content=logo.content,
+        media_type=logo.content_type,
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 if FRONTEND_DIST.is_dir():

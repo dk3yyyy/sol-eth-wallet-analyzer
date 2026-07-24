@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from services import ServiceError
+from services import ServiceError, TokenLogo
 
 
 async def request(app, method, path, **kwargs):
@@ -160,3 +160,33 @@ async def test_provider_errors_are_sanitized(monkeypatch):
         "detail": "Wallet data providers are temporarily unavailable. Try again shortly."
     }
     assert "secret provider response" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_token_logo_is_served_same_origin_with_a_raster_content_type(monkeypatch):
+    import web_app
+
+    fetch_logo = AsyncMock(return_value=TokenLogo(b"webp-bytes", "image/webp"))
+    monkeypatch.setattr(web_app, "fetch_token_logo", fetch_logo)
+
+    mint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+    response = await request(web_app.app, "GET", f"/api/token-logo/{mint}")
+
+    assert response.status_code == 200
+    assert response.content == b"webp-bytes"
+    assert response.headers["content-type"] == "image/webp"
+    assert response.headers["cache-control"] == "public, max-age=300"
+    fetch_logo.assert_awaited_once_with(mint)
+
+
+@pytest.mark.asyncio
+async def test_token_logo_returns_404_when_metadata_has_no_safe_image(monkeypatch):
+    import web_app
+
+    monkeypatch.setattr(web_app, "fetch_token_logo", AsyncMock(return_value=None))
+    mint = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+
+    response = await request(web_app.app, "GET", f"/api/token-logo/{mint}")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Token logo unavailable."}
