@@ -38,7 +38,7 @@ const holdingsResult = {
     allocation_percent: 6.3,
   },
   tokens: [
-    { mint: 'mint-beta', symbol: 'BETA', name: 'Beta Token', balance: 20, price_usd: 5, value_usd: 100, price_change_24h_percent: 2, liquidity_usd: 100000, market_url: null, logo_available: true },
+    { mint: 'mint-beta', symbol: 'BETA', name: 'Beta Token', balance: 20, price_usd: 5, value_usd: 100, price_change_24h_percent: 2, liquidity_usd: 100000, market_url: 'https://dexscreener.com/solana/beta', logo_available: true },
     { mint: 'mint-alpha', symbol: 'ALPHA', name: 'Alpha Token', balance: 5, price_usd: 0.1, value_usd: 0.5, price_change_24h_percent: -1, liquidity_usd: 5000, market_url: null },
     { mint: 'mint-unknown', symbol: 'UNKNOWN', name: 'Unpriced Token', balance: 50, price_usd: null, value_usd: null, price_change_24h_percent: null, liquidity_usd: null, market_url: null },
   ],
@@ -319,4 +319,120 @@ test('has no horizontal overflow with result controls at a mobile viewport', asy
     client: document.documentElement.clientWidth,
   }));
   expect(widths.scroll).toBe(widths.client);
+});
+
+test('stacks result actions and turns holdings into readable cards on narrow phones', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Token holdings' })).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const identity = document.querySelector('.wallet-identity').getBoundingClientRect();
+    const actions = document.querySelector('.portfolio-actions').getBoundingClientRect();
+    const tableWrap = document.querySelector('.table-wrap');
+    const firstCells = [...document.querySelectorAll('tbody tr:first-child td')];
+    const targets = [...document.querySelectorAll('.portfolio-header button, .portfolio-header a, .snapshot-actions button, .asset-cell a')];
+    return {
+      actionsBelowIdentity: actions.top >= identity.bottom,
+      targetHeights: targets.map((target) => Math.round(target.getBoundingClientRect().height)),
+      targetWidths: targets.map((target) => Math.round(target.getBoundingClientRect().width)),
+      tableClientWidth: tableWrap.clientWidth,
+      tableScrollWidth: tableWrap.scrollWidth,
+      labels: firstCells.map((cell) => cell.getAttribute('data-label')),
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+
+  expect(layout.actionsBelowIdentity).toBe(true);
+  expect(layout.targetHeights.every((height) => height >= 44)).toBe(true);
+  expect(layout.targetWidths.every((width) => width >= 44)).toBe(true);
+  expect(layout.tableScrollWidth).toBeLessThanOrEqual(layout.tableClientWidth);
+  expect(layout.labels).toEqual(['Asset', 'Balance', 'Price', 'Value', '24h', 'Liquidity']);
+  expect(layout.pageScrollWidth).toBe(layout.pageClientWidth);
+  await expect(page.getByRole('table', { name: 'Token holdings table' })).toBeVisible();
+  await expect(page.getByRole('columnheader')).toHaveCount(6);
+  await expect(page.getByRole('cell')).toHaveCount(18);
+});
+
+test('uses holding cards when an intermediate viewport cannot fit the full table', async ({ page }) => {
+  await page.setViewportSize({ width: 667, height: 900 });
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Token holdings' })).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const tableWrap = document.querySelector('.table-wrap');
+    return {
+      firstRowDisplay: getComputedStyle(document.querySelector('tbody tr')).display,
+      tableClientWidth: tableWrap.clientWidth,
+      tableScrollWidth: tableWrap.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+
+  expect(layout.firstRowDisplay).toBe('grid');
+  expect(layout.tableScrollWidth).toBeLessThanOrEqual(layout.tableClientWidth);
+  expect(layout.pageScrollWidth).toBe(layout.pageClientWidth);
+});
+
+test('retains a fitted table layout on a small portrait tablet', async ({ page }) => {
+  await page.setViewportSize({ width: 744, height: 1133 });
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Token holdings' })).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const identity = document.querySelector('.wallet-identity').getBoundingClientRect();
+    const actions = document.querySelector('.portfolio-actions').getBoundingClientRect();
+    const tableWrap = document.querySelector('.table-wrap');
+    return {
+      actionsBelowIdentity: actions.top >= identity.bottom,
+      firstRowDisplay: getComputedStyle(document.querySelector('tbody tr')).display,
+      tableClientWidth: tableWrap.clientWidth,
+      tableScrollWidth: tableWrap.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+
+  expect(layout.actionsBelowIdentity).toBe(false);
+  expect(layout.firstRowDisplay).toBe('table-row');
+  expect(layout.tableScrollWidth).toBeLessThanOrEqual(layout.tableClientWidth);
+  expect(layout.pageScrollWidth).toBe(layout.pageClientWidth);
+});
+
+test('fits result data and touch targets within a portrait tablet', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Token holdings' })).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const tableWrap = document.querySelector('.table-wrap');
+    const targets = [...document.querySelectorAll(
+      '.portfolio-header button, .portfolio-header a, .snapshot-actions button, .holdings-toolbar input[type="search"], .holdings-toolbar select, .dust-toggle',
+    )];
+    return {
+      targetHeights: targets.map((target) => Math.round(target.getBoundingClientRect().height)),
+      tableClientWidth: tableWrap.clientWidth,
+      tableScrollWidth: tableWrap.scrollWidth,
+      pageClientWidth: document.documentElement.clientWidth,
+      pageScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+
+  expect(layout.targetHeights.every((height) => height >= 44)).toBe(true);
+  expect(layout.tableScrollWidth).toBeLessThanOrEqual(layout.tableClientWidth);
+  expect(layout.pageScrollWidth).toBe(layout.pageClientWidth);
 });

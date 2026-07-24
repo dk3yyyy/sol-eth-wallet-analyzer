@@ -344,23 +344,23 @@ function PortfolioResult({ result, loading, onRefresh, onCopyAddress, onCopyShar
               <>
                 <p className="table-scroll-hint">Swipe the table to see price and market data →</p>
                 <div className="table-wrap">
-                  <table>
-              <thead>
-                <tr>
-                  <th scope="col">Asset</th>
-                  <th scope="col">Balance</th>
-                  <th scope="col">Price</th>
-                  <th scope="col">Value</th>
-                  <th scope="col">24h</th>
-                  <th scope="col">Liquidity</th>
+                  <table role="table" aria-label="Token holdings table">
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th scope="col" role="columnheader">Asset</th>
+                  <th scope="col" role="columnheader">Balance</th>
+                  <th scope="col" role="columnheader">Price</th>
+                  <th scope="col" role="columnheader">Value</th>
+                  <th scope="col" role="columnheader">24h</th>
+                  <th scope="col" role="columnheader">Liquidity</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 {visibleTokens.map((token) => {
                   const marketUrl = safeHttpsUrl(token.market_url);
                   return (
-                    <tr key={token.mint}>
-                      <td>
+                    <tr key={token.mint} role="row">
+                      <td data-label="Asset" role="cell">
                         <div className="asset-cell">
                           <TokenMark token={token} />
                           <div>
@@ -370,13 +370,13 @@ function PortfolioResult({ result, loading, onRefresh, onCopyAddress, onCopyShar
                           {marketUrl && <a href={marketUrl} target="_blank" rel="noreferrer" aria-label={`View ${token.symbol} market`}>↗</a>}
                         </div>
                       </td>
-                      <td>{formatQuantity(token.balance)}</td>
-                      <td>{formatCurrency(token.price_usd, 6)}</td>
-                      <td><strong>{formatCurrency(token.value_usd)}</strong></td>
-                      <td className={Number(token.price_change_24h_percent) >= 0 ? 'positive' : 'negative'}>
+                      <td data-label="Balance" role="cell">{formatQuantity(token.balance)}</td>
+                      <td data-label="Price" role="cell">{formatCurrency(token.price_usd, 6)}</td>
+                      <td data-label="Value" role="cell"><strong>{formatCurrency(token.value_usd)}</strong></td>
+                      <td data-label="24h" role="cell" className={Number(token.price_change_24h_percent) >= 0 ? 'positive' : 'negative'}>
                         {token.price_change_24h_percent === null ? '—' : `${Number(token.price_change_24h_percent) >= 0 ? '+' : ''}${formatQuantity(token.price_change_24h_percent, 2)}%`}
                       </td>
-                      <td>{token.liquidity_usd === null ? '—' : `$${compactNumber(token.liquidity_usd)}`}</td>
+                      <td data-label="Liquidity" role="cell">{token.liquidity_usd === null ? '—' : `$${compactNumber(token.liquidity_usd)}`}</td>
                     </tr>
                   );
                 })}
