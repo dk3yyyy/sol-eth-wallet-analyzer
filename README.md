@@ -23,24 +23,45 @@ An async Telegram bot that validates Solana and Ethereum addresses, reports nati
 
 ### 1. **Prerequisites**
 
-```bash
-# Requirements
-- Python 3.11+
-- Telegram Bot Token (from @BotFather)
-- Etherscan API Key (from etherscan.io/apis)
-```
+- Python 3.11 or newer (`python --version`)
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- An Etherscan API key from the [Etherscan API dashboard](https://etherscan.io/myapikey) for Ethereum balance lookups
+
+CoinGecko and DexScreener do not require API keys for the requests made by this bot.
 
 ### 2. **Installation**
+
+On Linux or macOS:
 
 ```bash
 git clone https://github.com/dk3yyyy/sol-eth-wallet-analyzer.git
 cd sol-eth-wallet-analyzer
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+On Windows PowerShell:
+
+```powershell
+git clone https://github.com/dk3yyyy/sol-eth-wallet-analyzer.git
+Set-Location sol-eth-wallet-analyzer
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 ### 3. **Configuration**
 
-Create `.env` file:
+Copy the provided environment template:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell, use `Copy-Item .env.example .env` instead. Open `.env` and replace the two required placeholder values:
 
 ```env
 TELEGRAM_TOKEN=your_bot_token_here
@@ -59,6 +80,8 @@ LOG_CHANNEL_ID=-1001234567890                 # For user logging (recommended)
 ```bash
 python main.py
 ```
+
+The bot uses long polling and keeps running until you stop it with `Ctrl+C`. Environment variables are loaded at startup, so restart the process after changing `.env`.
 
 ## 📊 Admin Setup
 
@@ -156,12 +179,16 @@ Stop the bot process to disable polling; no external scheduler is installed by t
 
 ## 🐛 Troubleshooting
 
-**Common Issues:**
-
-- `TELEGRAM_TOKEN not found` → Check `.env` file exists
-- `ETHERSCAN_API_KEY not set` → Add API key to `.env`
-- Slow responses → Large Solana portfolios require multiple bounded market-data calls; repeated requests use five-minute caches
-- Provider unavailable → Retry after the upstream service recovers; the bot intentionally does not replace missing financial data with zero
+| Symptom | What to check |
+|---------|---------------|
+| `TELEGRAM_TOKEN is not set` | Confirm `.env` exists in the repository root, `TELEGRAM_TOKEN` is not still a placeholder, and the bot was restarted after editing the file. |
+| Ethereum balance is unavailable | Confirm `ETHERSCAN_API_KEY` is a valid Etherscan V2 key, then restart the bot so the updated value is loaded. |
+| Telegram reports another `getUpdates` request | Only one process can poll with a bot token. Stop the other local or deployed instance before starting this one. |
+| `/stats` reports that access is restricted | Set `ADMIN_CHAT_ID` to the numeric chat ID of the user who will run `/stats`; `LOG_CHANNEL_ID` does not grant access to this command. Restart the bot after changing `.env`. |
+| Admin logs are not delivered | Set `LOG_CHANNEL_ID` to the numeric destination ID and add the bot there with permission to post messages. This setting controls logging only and does not grant `/stats` access. |
+| Solana requests are rate-limited or unavailable | Retry later or set `SOLANA_RPC_URL` to a reliable custom endpoint in `.env`, then restart the bot. |
+| Responses are slow for a large Solana wallet | Large portfolios require multiple bounded market-data calls. Repeated requests use the five-minute caches. |
+| A provider is unavailable | Retry after the upstream service recovers. The bot intentionally does not replace missing financial data with zero. |
 
 ## 👨‍💻 Developer
 
