@@ -34,6 +34,12 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node and browser tests
+node_modules/
+frontend/dist/
+test-results/
+playwright-report/
+
 # Editors
 .vscode/
 .idea/

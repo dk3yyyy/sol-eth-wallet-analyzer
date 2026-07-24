@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+node_modules
+test-results
+playwright-report
+frontend/dist
+user_data.json
+.env
+.env.*
+!.env.example
+*.log

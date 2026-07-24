@@ -23,13 +23,19 @@ jobs:
         python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m compileall -q main.py services.py utils.py
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: python -m compileall -q main.py services.py utils.py analyzer.py web_app.py
       - run: python -m pytest -q
 
   quality:
@@ -45,5 +51,54 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check .
-      - run: python -m bandit -q -r main.py services.py utils.py --severity-level medium --confidence-level medium
+      - run: python -m bandit -q -r main.py services.py utils.py analyzer.py web_app.py --severity-level medium --confidence-level medium
       - run: python -m pip_audit -r requirements.txt
+
+  web:
+    name: Web build and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm run test:production
+      - run: docker build -t wallet-analyzer:test .
+      - name: Smoke-test production container
+        run: |
+          set -euo pipefail
+          docker run --rm -d --name wallet-analyzer-smoke -p 8000:8000 wallet-analyzer:test
+          trap 'docker rm -f wallet-analyzer-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/api/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              docker logs wallet-analyzer-smoke
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:8000/ >/tmp/wallet-analyzer-index.html
+          grep -q '<div id="root"></div>' /tmp/wallet-analyzer-index.html
+          curl --fail --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:8000/ \
+            | grep -qi '^content-security-policy:'
+          status="$(curl --silent --output /tmp/wallet-analyzer-invalid.json --write-out '%{http_code}' \
+            -H 'Content-Type: application/json' \
+            --data '{"address":"not-a-wallet"}' \
+            http://127.0.0.1:8000/api/analyze)"
+          test "$status" = "422"
+          grep -q 'Enter a valid Solana or Ethereum wallet address' /tmp/wallet-analyzer-invalid.json

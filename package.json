@@ -1,0 +1,21 @@
+{
+  "name": "sol-eth-wallet-analyzer-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build frontend",
+    "dev": "vite frontend",
+    "test:browser": "playwright test",
+    "test:production": "playwright test --config=playwright.production.config.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@vitejs/plugin-react": "6.0.4",
+    "vite": "8.1.5"
+  }
+}
