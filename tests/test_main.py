@@ -41,9 +41,9 @@ async def test_registration_does_not_depend_on_admin_logging():
     assert "123" in data["users"]
 
 
-def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
+def test_dotenv_is_loaded_before_services_read_rpc_configuration(tmp_path):
     (tmp_path / ".env").write_text(
-        "TELEGRAM_TOKEN=test-token\nETHERSCAN_API_KEY=test-etherscan-key\n",
+        "TELEGRAM_TOKEN=test-token\nETHEREUM_RPC_URL=https://ethereum.example.test\n",
         encoding="utf-8",
     )
     repo = Path(__file__).resolve().parents[1]
@@ -52,9 +52,9 @@ def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
         f"sys.path.insert(0, {str(repo)!r}); "
         "import main, services; "
         "print(json.dumps({'telegram': bool(main.TELEGRAM_TOKEN), "
-        "'etherscan': bool(services.ETHERSCAN_API_KEY)}))"
+        "'ethereum_rpc': services.ETHEREUM_RPC_URL}))"
     )
-    env = {k: v for k, v in os.environ.items() if k not in {"TELEGRAM_TOKEN", "ETHERSCAN_API_KEY"}}
+    env = {k: v for k, v in os.environ.items() if k not in {"TELEGRAM_TOKEN", "ETHEREUM_RPC_URL"}}
 
     completed = subprocess.run(
         [sys.executable, "-c", code],
@@ -66,7 +66,10 @@ def test_dotenv_is_loaded_before_services_read_api_key(tmp_path):
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert json.loads(completed.stdout.splitlines()[-1]) == {"telegram": True, "etherscan": True}
+    assert json.loads(completed.stdout.splitlines()[-1]) == {
+        "telegram": True,
+        "ethereum_rpc": "https://ethereum.example.test",
+    }
 
 
 @pytest.mark.asyncio
@@ -118,6 +121,79 @@ async def test_refresh_forces_fresh_provider_data(monkeypatch):
     await main.handle_callback(update, context)
 
     analysis.assert_awaited_once_with(address, force_refresh=True)
+
+
+@pytest.mark.asyncio
+async def test_telegram_ethereum_report_uses_shared_rpc_services(monkeypatch):
+    address = "0x" + "1" * 40
+    balance = AsyncMock(return_value=1.25)
+    price = AsyncMock(return_value=2_000.0)
+    monkeypatch.setattr(main, "get_eth_balance", balance)
+    monkeypatch.setattr(main, "get_eth_price", price)
+
+    report, keyboard = await main.create_enhanced_ethereum_analysis(address)
+
+    assert "Enhanced Ethereum Analysis" in report
+    assert "1.25" in report
+    assert "2,500.00" in report
+    assert keyboard is not None
+    assert balance.await_args.args[0] == address
+    assert balance.await_args.kwargs == {"force_refresh": False}
+    assert price.await_args.kwargs == {"force_refresh": False}
+
+
+@pytest.mark.asyncio
+async def test_telegram_solana_report_accepts_logo_enriched_metadata(monkeypatch):
+    address = "11111111111111111111111111111111"
+    monkeypatch.setattr(main, "get_sol_balance", AsyncMock(return_value=10.0))
+    monkeypatch.setattr(main, "get_sol_price", AsyncMock(return_value=150.0))
+    monkeypatch.setattr(
+        main,
+        "get_token_accounts",
+        AsyncMock(
+            return_value=[
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "mint": "AlphaMint1111111111111111111111111111111",
+                                    "tokenAmount": {"uiAmountString": "5"},
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        main,
+        "get_token_data_dexscreener",
+        AsyncMock(
+            return_value={
+                "name": "Alpha Token",
+                "symbol": "ALPHA",
+                "price_usd": 2.0,
+                "price_in_sol": 0.02,
+                "market_cap": 1_000_000,
+                "volume_24h": 50_000,
+                "liquidity": 100_000,
+                "price_change_24h": 4.2,
+                "url": "https://dexscreener.com/solana/alpha",
+                "logo_url": "https://cdn.dexscreener.com/cms/images/alpha?format=auto",
+                "logo_available": True,
+            }
+        ),
+    )
+
+    header, token_pages, keyboard = await main.create_enhanced_solana_analysis(address)
+
+    assert "Enhanced Solana Analysis" in header
+    assert "1,510.00" in header
+    assert len(token_pages) == 1
+    assert "Alpha Token" in token_pages[0]
+    assert keyboard is not None
 
 
 def test_token_balance_falls_back_to_ui_amount_string():

@@ -13,28 +13,32 @@ def clear_service_cache():
 
 
 @pytest.mark.asyncio
-async def test_ethereum_balance_uses_v2_and_chain_id(monkeypatch):
-    request_json = AsyncMock(return_value={"status": "1", "message": "OK", "result": "1500000000000000000"})
+async def test_ethereum_balance_uses_json_rpc_without_an_api_key(monkeypatch):
+    request_json = AsyncMock(return_value={"jsonrpc": "2.0", "id": 1, "result": "0x14d1120d7b160000"})
     monkeypatch.setattr(services, "_request_json", request_json)
-    monkeypatch.setattr(services, "ETHERSCAN_API_KEY", "test-key")
+    monkeypatch.setattr(services, "ETHEREUM_RPC_URL", "https://ethereum.example.test")
 
     balance = await services.get_eth_balance("0x" + "1" * 40, force_refresh=True)
 
     assert balance == 1.5
     _, method, url = request_json.await_args.args[:3]
-    params = request_json.await_args.kwargs["params"]
-    assert method == "GET"
-    assert url == "https://api.etherscan.io/v2/api"
-    assert params["chainid"] == "1"
+    payload = request_json.await_args.kwargs["json"]
+    assert method == "POST"
+    assert url == "https://ethereum.example.test"
+    assert payload == {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_getBalance",
+        "params": ["0x" + "1" * 40, "latest"],
+    }
 
 
 @pytest.mark.asyncio
 async def test_ethereum_api_error_is_not_reported_as_zero(monkeypatch):
     request_json = AsyncMock(
-        return_value={"status": "0", "message": "NOTOK", "result": "rate limit reached"}
+        return_value={"jsonrpc": "2.0", "id": 1, "error": {"code": -32005}}
     )
     monkeypatch.setattr(services, "_request_json", request_json)
-    monkeypatch.setattr(services, "ETHERSCAN_API_KEY", "test-key")
 
     with pytest.raises(services.ServiceError, match="Ethereum balance"):
         await services.get_eth_balance("0x" + "1" * 40, force_refresh=True)
@@ -117,9 +121,11 @@ async def test_force_refresh_bypasses_cached_balance(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_missing_etherscan_key_is_not_reported_as_zero(monkeypatch):
-    monkeypatch.setattr(services, "ETHERSCAN_API_KEY", None)
-    with pytest.raises(services.ServiceError, match="not configured"):
+async def test_malformed_ethereum_hex_balance_is_not_reported_as_zero(monkeypatch):
+    request_json = AsyncMock(return_value={"jsonrpc": "2.0", "id": 1, "result": "not-hex"})
+    monkeypatch.setattr(services, "_request_json", request_json)
+
+    with pytest.raises(services.ServiceError, match="malformed data"):
         await services.get_eth_balance("0x" + "1" * 40, session=object(), force_refresh=True)
 
 

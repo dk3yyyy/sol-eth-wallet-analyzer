@@ -121,6 +121,7 @@ async def _analyze_solana(address: str, *, force_refresh: bool) -> dict[str, Any
                 "liquidity_usd": token_data.get("liquidity"),
                 "price_change_24h_percent": token_data.get("price_change_24h"),
                 "market_url": token_data.get("url"),
+                "logo_available": bool(token_data.get("logo_url")),
             }
         )
 
