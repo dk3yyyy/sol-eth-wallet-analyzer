@@ -4,8 +4,12 @@ import logging
 import math
 import os
 import ssl
+import threading
 import time
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import aiohttp
 import certifi
@@ -14,20 +18,26 @@ from aiohttp import ClientTimeout
 logger = logging.getLogger(__name__)
 
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+ETHEREUM_RPC_URL = os.getenv("ETHEREUM_RPC_URL", "https://ethereum-rpc.publicnode.com")
 SOL_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"
 ETH_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
 DEXSCREENER_TOKEN_PAIRS_API = "https://api.dexscreener.com/token-pairs/v1/solana"
-ETHERSCAN_API = "https://api.etherscan.io/v2/api"
-ETHEREUM_CHAIN_ID = "1"
 
 SPL_TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
 TOKEN_PROGRAMS = (SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM)
 
-ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
 CACHE_DURATION = 300
 MAX_CACHE_ENTRIES = 2048
 REQUEST_ATTEMPTS = 3
+MAX_TOKEN_LOGO_BYTES = 512 * 1024
+TOKEN_LOGO_CONTENT_TYPES = frozenset({"image/avif", "image/jpeg", "image/png", "image/webp"})
+DEXSCREENER_LOGO_HOST = "cdn.dexscreener.com"
+MAX_TOKEN_LOGO_CACHE_BYTES = 8 * 1024 * 1024
+MAX_TOKEN_LOGO_CACHE_ENTRIES = 256
+MAX_CONCURRENT_TOKEN_LOGOS = 8
+MAX_PENDING_TOKEN_LOGOS = 32
+TOKEN_LOGO_NEGATIVE_TTL_SECONDS = 60
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -39,6 +49,86 @@ class ServiceError(RuntimeError):
         self.operation = operation
         self.reason = reason
         super().__init__(f"{operation} {reason}")
+
+
+@dataclass(frozen=True)
+class TokenLogo:
+    content: bytes
+    content_type: str
+
+
+class TokenLogoCache:
+    def __init__(
+        self,
+        *,
+        max_bytes: int = MAX_TOKEN_LOGO_CACHE_BYTES,
+        max_entries: int = MAX_TOKEN_LOGO_CACHE_ENTRIES,
+        ttl_seconds: int = CACHE_DURATION,
+        negative_ttl_seconds: int = TOKEN_LOGO_NEGATIVE_TTL_SECONDS,
+    ):
+        self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self._max_bytes = max_bytes
+        self._max_entries = max_entries
+        self._ttl_seconds = ttl_seconds
+        self._negative_ttl_seconds = negative_ttl_seconds
+        self._total_bytes = 0
+        self._lock = threading.RLock()
+
+    @property
+    def total_bytes(self) -> int:
+        with self._lock:
+            return self._total_bytes
+
+    def _remove(self, key: str) -> None:
+        with self._lock:
+            entry = self._cache.pop(key, None)
+            if entry is not None:
+                self._total_bytes -= entry["size"]
+
+    def get(
+        self,
+        key: str,
+        *,
+        now: Optional[float] = None,
+    ) -> tuple[bool, Optional[TokenLogo]]:
+        with self._lock:
+            timestamp = time.monotonic() if now is None else now
+            entry = self._cache.get(key)
+            if entry is None:
+                return False, None
+            ttl = self._negative_ttl_seconds if entry["data"] is None else self._ttl_seconds
+            if timestamp - entry["timestamp"] >= ttl:
+                self._remove(key)
+                return False, None
+            self._cache.move_to_end(key)
+            return True, entry["data"]
+
+    def set(
+        self,
+        key: str,
+        data: Optional[TokenLogo],
+        *,
+        now: Optional[float] = None,
+    ) -> None:
+        with self._lock:
+            size = len(data.content) if data is not None else 0
+            self._remove(key)
+            if size > self._max_bytes:
+                return
+            self._cache[key] = {
+                "data": data,
+                "size": size,
+                "timestamp": time.monotonic() if now is None else now,
+            }
+            self._total_bytes += size
+            while self._total_bytes > self._max_bytes or len(self._cache) > self._max_entries:
+                oldest_key = next(iter(self._cache))
+                self._remove(oldest_key)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            self._total_bytes = 0
 
 
 class CacheService:
@@ -87,6 +177,13 @@ class CacheService:
 
 
 cache_service = CacheService()
+token_logo_cache = TokenLogoCache()
+_token_logo_inflight: Dict[
+    tuple[asyncio.AbstractEventLoop, str],
+    asyncio.Task[Optional[TokenLogo]],
+] = {}
+_token_logo_capacity_lock = threading.Lock()
+_active_token_logo_fetches = 0
 
 
 async def _request_json(
@@ -264,6 +361,58 @@ def _number(value: Any) -> Optional[float]:
     return number if number is not None and math.isfinite(number) else None
 
 
+def _validated_dexscreener_logo_url(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != DEXSCREENER_LOGO_HOST
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+        or not parsed.path.startswith("/cms/images/")
+    ):
+        return None
+    return value
+
+
+def _matching_solana_pairs(data: Any, mint: str) -> List[dict]:
+    pairs = data if isinstance(data, list) else data.get("pairs", []) if isinstance(data, dict) else []
+    matching = []
+    for pair in pairs:
+        if not isinstance(pair, dict) or pair.get("chainId") != "solana":
+            continue
+        base = pair.get("baseToken", {})
+        quote = pair.get("quoteToken", {})
+        addresses = {str(base.get("address", "")).lower(), str(quote.get("address", "")).lower()}
+        if mint.lower() in addresses:
+            matching.append(pair)
+    return matching
+
+
+def _token_logo_url(pairs: List[dict], mint: str) -> Optional[str]:
+    candidates = []
+    for pair in pairs:
+        base = pair.get("baseToken", {})
+        if str(base.get("address", "")).lower() != mint.lower():
+            continue
+        logo_url = _validated_dexscreener_logo_url(pair.get("info", {}).get("imageUrl"))
+        if logo_url:
+            candidates.append((pair, logo_url))
+    if not candidates:
+        return None
+    _, logo_url = max(
+        candidates,
+        key=lambda item: _number(item[0].get("liquidity", {}).get("usd")) or 0.0,
+    )
+    return logo_url
+
+
 async def get_token_data_dexscreener(
     session: aiohttp.ClientSession,
     mint: str,
@@ -281,16 +430,7 @@ async def get_token_data_dexscreener(
         operation="DexScreener token data",
         timeout=15,
     )
-    pairs = data if isinstance(data, list) else data.get("pairs", []) if isinstance(data, dict) else []
-    matching = []
-    for pair in pairs:
-        if not isinstance(pair, dict) or pair.get("chainId") != "solana":
-            continue
-        base = pair.get("baseToken", {})
-        quote = pair.get("quoteToken", {})
-        addresses = {str(base.get("address", "")).lower(), str(quote.get("address", "")).lower()}
-        if mint.lower() in addresses:
-            matching.append(pair)
+    matching = _matching_solana_pairs(data, mint)
     if not matching:
         return None
 
@@ -330,9 +470,118 @@ async def get_token_data_dexscreener(
         "liquidity": pair.get("liquidity", {}).get("usd"),
         "price_change_24h": pair.get("priceChange", {}).get("h24"),
         "url": pair.get("url") or f"https://dexscreener.com/solana/{pair.get('pairAddress', mint)}",
+        "logo_url": _token_logo_url(matching, mint),
     }
     cache_service.set(cache_key, token_data)
     return token_data
+
+
+async def _fetch_token_logo_uncached(
+    mint: str,
+    session: Optional[aiohttp.ClientSession],
+) -> Optional[TokenLogo]:
+    token_data = cache_service.get(cache_service.get_key("token_data", mint))
+    logo_url = _validated_dexscreener_logo_url(
+        token_data.get("logo_url") if isinstance(token_data, dict) else None
+    )
+
+    async def fetch(active_session: aiohttp.ClientSession) -> Optional[TokenLogo]:
+        nonlocal logo_url
+        if logo_url is None:
+            data = await _request_json(
+                active_session,
+                "GET",
+                f"{DEXSCREENER_TOKEN_PAIRS_API}/{mint}",
+                operation="DexScreener token logo metadata",
+                timeout=10,
+            )
+            logo_url = _token_logo_url(_matching_solana_pairs(data, mint), mint)
+        if logo_url is None:
+            return None
+
+        try:
+            async with active_session.get(
+                logo_url,
+                allow_redirects=False,
+                headers={"Accept": "image/avif,image/webp,image/png,image/jpeg"},
+                timeout=ClientTimeout(total=10),
+            ) as response:
+                content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
+                if response.status != 200 or content_type not in TOKEN_LOGO_CONTENT_TYPES:
+                    return None
+                if response.content_length is not None and response.content_length > MAX_TOKEN_LOGO_BYTES:
+                    return None
+                content = bytearray()
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    content.extend(chunk)
+                    if len(content) > MAX_TOKEN_LOGO_BYTES:
+                        return None
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            return None
+
+        if not content:
+            return None
+        return TokenLogo(bytes(content), content_type)
+
+    return await _run_with_session(session, fetch)
+
+
+async def _load_and_cache_token_logo(
+    mint: str,
+    session: Optional[aiohttp.ClientSession],
+) -> Optional[TokenLogo]:
+    global _active_token_logo_fetches
+    while True:
+        with _token_logo_capacity_lock:
+            if _active_token_logo_fetches < MAX_CONCURRENT_TOKEN_LOGOS:
+                _active_token_logo_fetches += 1
+                break
+        await asyncio.sleep(0.01)
+    try:
+        try:
+            logo = await _fetch_token_logo_uncached(mint, session)
+        except ServiceError:
+            logo = None
+    finally:
+        with _token_logo_capacity_lock:
+            _active_token_logo_fetches -= 1
+    token_logo_cache.set(mint, logo)
+    return logo
+
+
+def _discard_logo_task(
+    key: tuple[asyncio.AbstractEventLoop, str],
+    task: asyncio.Task[Optional[TokenLogo]],
+) -> None:
+    with _token_logo_capacity_lock:
+        if _token_logo_inflight.get(key) is task:
+            _token_logo_inflight.pop(key, None)
+
+
+async def fetch_token_logo(
+    mint: str,
+    session: Optional[aiohttp.ClientSession] = None,
+) -> Optional[TokenLogo]:
+    if not isinstance(mint, str) or not 32 <= len(mint) <= 44 or any(
+        character not in "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+        for character in mint
+    ):
+        return None
+
+    found, cached = token_logo_cache.get(mint)
+    if found:
+        return cached
+
+    key = (asyncio.get_running_loop(), mint)
+    with _token_logo_capacity_lock:
+        task = _token_logo_inflight.get(key)
+        if task is None:
+            if len(_token_logo_inflight) >= MAX_PENDING_TOKEN_LOGOS:
+                return None
+            task = asyncio.create_task(_load_and_cache_token_logo(mint, session))
+            _token_logo_inflight[key] = task
+            task.add_done_callback(lambda completed: _discard_logo_task(key, completed))
+    return await asyncio.shield(task)
 
 
 async def get_eth_balance(
@@ -343,29 +592,25 @@ async def get_eth_balance(
     cache_key = cache_service.get_key("eth_balance", wallet_address)
     if not force_refresh and (cached := cache_service.get(cache_key)) is not None:
         return cached
-    if not ETHERSCAN_API_KEY:
-        raise ServiceError("Ethereum balance", "is not configured")
 
     async def fetch(active_session: aiohttp.ClientSession) -> float:
         data = await _request_json(
             active_session,
-            "GET",
-            ETHERSCAN_API,
+            "POST",
+            ETHEREUM_RPC_URL,
             operation="Ethereum balance",
-            params={
-                "chainid": ETHEREUM_CHAIN_ID,
-                "module": "account",
-                "action": "balance",
-                "address": wallet_address,
-                "tag": "latest",
-                "apikey": ETHERSCAN_API_KEY,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "eth_getBalance",
+                "params": [wallet_address, "latest"],
             },
         )
-        if not isinstance(data, dict) or str(data.get("status")) != "1":
-            raise ServiceError("Ethereum balance", "provider rejected the request")
-        result = data.get("result")
+        result = _rpc_result(data, "Ethereum balance")
         try:
-            wei = int(result)
+            if not isinstance(result, str) or not result.startswith("0x"):
+                raise ValueError
+            wei = int(result, 16)
         except (TypeError, ValueError) as exc:
             raise ServiceError("Ethereum balance", "returned malformed data") from exc
         if wei < 0:
