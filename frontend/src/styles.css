@@ -456,6 +456,31 @@ main {
   white-space: nowrap;
 }
 
+.address-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.address-control button {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  color: #8492a6;
+  background: transparent;
+  border: 1px solid #354259;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.address-control button:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
 .portfolio-actions {
   display: flex;
   align-items: center;
@@ -692,6 +717,93 @@ main {
 .allocation-legend b {
   color: #cbd2dd;
   margin-left: 4px;
+}
+
+.asset-composition {
+  margin-top: 34px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.composition-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.composition-heading h4 {
+  margin: 6px 0 0;
+  font-size: 17px;
+}
+
+.composition-heading > span {
+  color: #68768a;
+  font-size: 10px;
+}
+
+.asset-composition ol {
+  display: grid;
+  gap: 13px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asset-composition li {
+  --composition-color: var(--cyan);
+  display: grid;
+  grid-template-columns: minmax(86px, 0.22fr) minmax(160px, 1fr) minmax(82px, auto);
+  align-items: center;
+  gap: 16px;
+}
+
+.asset-composition li:nth-child(2) { --composition-color: var(--purple); }
+.asset-composition li:nth-child(3) { --composition-color: #e9b65d; }
+.asset-composition li:nth-child(4) { --composition-color: #78a6ff; }
+.asset-composition li:nth-child(5) { --composition-color: #66738a; }
+
+.composition-label {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+
+.composition-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.composition-label small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.asset-composition progress {
+  width: 100%;
+  height: 7px;
+  display: block;
+  overflow: hidden;
+  appearance: none;
+  border: 0;
+  background: #192235;
+}
+
+.asset-composition progress::-webkit-progress-bar { background: #192235; }
+.asset-composition progress::-webkit-progress-value { background: var(--composition-color); }
+.asset-composition progress::-moz-progress-bar { background: var(--composition-color); }
+
+.composition-value {
+  color: #cbd2dd;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-align: right;
 }
 
 .holdings {
@@ -1123,6 +1235,27 @@ footer {
   .allocation-legend {
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .composition-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .asset-composition li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 14px;
+  }
+
+  .asset-composition progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .composition-value {
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .table-scroll-hint {

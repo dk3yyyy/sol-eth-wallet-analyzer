@@ -10,9 +10,10 @@ A read-only web application and async Telegram bot for inspecting public Solana 
 - **Two-chain Support**: Analyze Solana and Ethereum addresses
 - **Real-time Data**: Native-asset prices from CoinGecko and Solana token market data from DexScreener
 - **Solana Portfolio Analytics**: legacy SPL Token and Token-2022 holdings, market metrics, allocation, and dust filtering
+- **Asset Composition**: Compare the native asset and leading valued token positions with accessible proportional bars; single-asset wallets avoid a redundant chart
 - **Holdings Workspace**: Search and sort token holdings, hide valued dust, and retain unpriced assets for honest coverage
 - **Token Identity**: Display available Solana token logos with deterministic symbol fallbacks
-- **Portable Snapshots**: Export the current result as CSV or JSON entirely in the browser
+- **Portable Snapshots**: Copy the analyzed address or export the current result as CSV or JSON entirely in the browser
 - **Privacy-aware Sharing**: Copy a fragment-only address link that pre-fills the form without triggering automatic analysis
 - **Resilient Refresh**: Request a fresh provider snapshot, preserve the previous result on failure, and retry provider errors in place
 - **Two Interfaces**: Browser portfolio view plus Telegram pagination, progress indicators, and explorer links

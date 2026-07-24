@@ -159,9 +159,40 @@ test('filters, sorts, and hides only valued dust holdings', async ({ page }) => 
   await page.getByLabel('Search token holdings').fill('');
   await page.getByLabel('Hide holdings under $1').check();
   await expect(dataRows).toHaveCount(2);
-  await expect(page.getByText('ALPHA', { exact: true })).toHaveCount(0);
+  await expect(page.locator('tbody').getByText('ALPHA', { exact: true })).toHaveCount(0);
   await expect(page.getByText('UNKNOWN', { exact: true })).toBeVisible();
   await expect(page.getByText('Showing 2 of 3 holdings')).toBeVisible();
+});
+
+test('shows a ranked composition view only when multiple assets are valued', async ({ page }) => {
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: holdingsResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+
+  const composition = page.getByRole('region', { name: 'Top asset allocation' });
+  await expect(composition).toBeVisible();
+  await expect(composition.getByText('SOL', { exact: true })).toBeVisible();
+  await expect(composition.getByText('BETA', { exact: true })).toBeVisible();
+  await expect(composition.getByText('ALPHA', { exact: true })).toBeVisible();
+  await expect(composition.getByText('$1,500.00')).toBeVisible();
+
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: sampleResult }));
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+  await expect(page.getByRole('region', { name: 'Top asset allocation' })).toHaveCount(0);
+});
+
+test('copies the full analyzed wallet address without exposing it in page text', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.route('**/api/analyze', (route) => route.fulfill({ json: sampleResult }));
+  await page.goto('/');
+  await page.getByLabel('Wallet address').fill(ethereumAddress);
+  await page.getByRole('button', { name: 'Analyze wallet' }).click();
+
+  await page.getByRole('button', { name: 'Copy analyzed address' }).click();
+
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(ethereumAddress);
+  await expect(page.getByRole('status')).toContainText('Wallet address copied');
 });
 
 test('exports the current snapshot as browser-generated CSV and JSON files', async ({ page }) => {

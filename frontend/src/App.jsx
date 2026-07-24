@@ -50,6 +50,33 @@ function safeHttpsUrl(value) {
   }
 }
 
+function portfolioComposition(result) {
+  const positions = [
+    {
+      id: `native-${result.native_asset.symbol}`,
+      label: result.native_asset.symbol,
+      value: Number(result.native_asset.value_usd),
+    },
+    ...result.tokens.map((token) => ({
+      id: token.mint,
+      label: token.symbol,
+      value: Number(token.value_usd),
+    })),
+  ]
+    .filter((position) => Number.isFinite(position.value) && position.value > 0)
+    .sort((left, right) => right.value - left.value);
+
+  if (positions.length < 2) return [];
+  const valuedTotal = positions.reduce((total, position) => total + position.value, 0);
+  const leading = positions.slice(0, 4);
+  const remainder = positions.slice(4).reduce((total, position) => total + position.value, 0);
+  if (remainder > 0) leading.push({ id: 'other', label: 'Other', value: remainder });
+  return leading.map((position) => ({
+    ...position,
+    percentage: (position.value / valuedTotal) * 100,
+  }));
+}
+
 function BrandMark() {
   return (
     <svg viewBox="0 0 40 40" aria-hidden="true" className="brand-mark">
@@ -115,12 +142,13 @@ function InitialPanel() {
   );
 }
 
-function PortfolioResult({ result, loading, onRefresh, onCopyShare, onAnnounce }) {
+function PortfolioResult({ result, loading, onRefresh, onCopyAddress, onCopyShare, onAnnounce }) {
   const [tokenQuery, setTokenQuery] = useState('');
   const [sortBy, setSortBy] = useState('value');
   const [hideDust, setHideDust] = useState(false);
   const nativeAllocation = Math.max(0, 100 - result.token_summary.allocation_percent);
   const explorerUrl = safeHttpsUrl(result.explorer_url);
+  const composition = useMemo(() => portfolioComposition(result), [result]);
   const visibleTokens = useMemo(() => {
     const query = tokenQuery.trim().toLowerCase();
     return result.tokens
@@ -159,9 +187,12 @@ function PortfolioResult({ result, loading, onRefresh, onCopyShare, onAnnounce }
   return (
     <section className="portfolio" aria-labelledby="portfolio-value">
       <header className="portfolio-header">
-        <div>
+        <div className="wallet-identity">
           <span className={`chain-tag chain-${result.chain}`}>{chainLabel(result.chain)}</span>
-          <p className="address-line" title={result.address}>{shortenAddress(result.address)}</p>
+          <div className="address-control">
+            <p className="address-line" title={result.address}>{shortenAddress(result.address)}</p>
+            <button type="button" onClick={onCopyAddress} aria-label="Copy analyzed address">Copy</button>
+          </div>
         </div>
         <div className="portfolio-actions">
           <button type="button" className="secondary-action" onClick={onRefresh} disabled={loading}>
@@ -241,6 +272,34 @@ function PortfolioResult({ result, loading, onRefresh, onCopyShare, onAnnounce }
           <span><i className="native-dot" />{result.native_asset.symbol} <b>{nativeAllocation.toFixed(1)}%</b></span>
           <span><i className="token-dot" />Tokens <b>{result.token_summary.allocation_percent.toFixed(1)}%</b></span>
         </div>
+
+        {composition.length > 0 && (
+          <section className="asset-composition" aria-labelledby="composition-title">
+            <div className="composition-heading">
+              <div>
+                <span className="eyebrow">VALUED ASSETS</span>
+                <h4 id="composition-title">Top asset allocation</h4>
+              </div>
+              <span>Unpriced holdings excluded</span>
+            </div>
+            <ol>
+              {composition.map((position) => (
+                <li key={position.id}>
+                  <span className="composition-label">
+                    <strong>{position.label}</strong>
+                    <small>{position.percentage.toFixed(1)}%</small>
+                  </span>
+                  <progress
+                    max="100"
+                    value={position.percentage}
+                    aria-label={`${position.label} ${position.percentage.toFixed(1)} percent`}
+                  />
+                  <span className="composition-value">{formatCurrency(position.value)}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
       </section>
 
       <section className="holdings" aria-labelledby="holdings-title">
@@ -434,6 +493,18 @@ export default function App() {
     }
   }
 
+  async function handleCopyAddress() {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(result.address);
+      setError('');
+      setStatus('Wallet address copied.');
+    } catch {
+      setError('The wallet address could not be copied. Check browser clipboard permissions.');
+      setStatus('Wallet address copy failed.');
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="site-header">
@@ -505,6 +576,7 @@ export default function App() {
             result={result}
             loading={loading}
             onRefresh={handleRefresh}
+            onCopyAddress={handleCopyAddress}
             onCopyShare={handleCopyShare}
             onAnnounce={setStatus}
           />
