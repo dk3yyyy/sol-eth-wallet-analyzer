@@ -31,6 +31,8 @@ CoinGecko and DexScreener do not require API keys for the requests made by this 
 
 ### 2. **Installation**
 
+On Linux or macOS:
+
 ```bash
 git clone https://github.com/dk3yyyy/sol-eth-wallet-analyzer.git
 cd sol-eth-wallet-analyzer
@@ -40,10 +42,15 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-On Windows PowerShell, activate the environment with:
+On Windows PowerShell:
 
 ```powershell
+git clone https://github.com/dk3yyyy/sol-eth-wallet-analyzer.git
+Set-Location sol-eth-wallet-analyzer
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 ### 3. **Configuration**
@@ -177,7 +184,8 @@ Stop the bot process to disable polling; no external scheduler is installed by t
 | `TELEGRAM_TOKEN is not set` | Confirm `.env` exists in the repository root, `TELEGRAM_TOKEN` is not still a placeholder, and the bot was restarted after editing the file. |
 | Ethereum balance is unavailable | Confirm `ETHERSCAN_API_KEY` is a valid Etherscan V2 key, then restart the bot so the updated value is loaded. |
 | Telegram reports another `getUpdates` request | Only one process can poll with a bot token. Stop the other local or deployed instance before starting this one. |
-| Admin logs or `/stats` do not work | Use numeric Telegram chat IDs. For channel logging, add the bot as an administrator with permission to post messages. |
+| `/stats` reports that access is restricted | Set `ADMIN_CHAT_ID` to the numeric chat ID of the user who will run `/stats`; `LOG_CHANNEL_ID` does not grant access to this command. Restart the bot after changing `.env`. |
+| Admin logs are not delivered | Set `LOG_CHANNEL_ID` to the numeric destination ID and add the bot there with permission to post messages. This setting controls logging only and does not grant `/stats` access. |
 | Solana requests are rate-limited or unavailable | Retry later or set `SOLANA_RPC_URL` to a reliable custom endpoint in `.env`, then restart the bot. |
 | Responses are slow for a large Solana wallet | Large portfolios require multiple bounded market-data calls. Repeated requests use the five-minute caches. |
 | A provider is unavailable | Retry after the upstream service recovers. The bot intentionally does not replace missing financial data with zero. |
