@@ -10,6 +10,10 @@ A read-only web application and async Telegram bot for inspecting public Solana 
 - **Two-chain Support**: Analyze Solana and Ethereum addresses
 - **Real-time Data**: Native-asset prices from CoinGecko and Solana token market data from DexScreener
 - **Solana Portfolio Analytics**: legacy SPL Token and Token-2022 holdings, market metrics, allocation, and dust filtering
+- **Holdings Workspace**: Search and sort token holdings, hide valued dust, and retain unpriced assets for honest coverage
+- **Portable Snapshots**: Export the current result as CSV or JSON entirely in the browser
+- **Privacy-aware Sharing**: Copy a fragment-only address link that pre-fills the form without triggering automatic analysis
+- **Resilient Refresh**: Request a fresh provider snapshot, preserve the previous result on failure, and retry provider errors in place
 - **Two Interfaces**: Browser portfolio view plus Telegram pagination, progress indicators, and explorer links
 - **Read-only by Design**: No wallet connection, signing request, transaction capability, or browser storage
 - **Truthful Failure States**: provider failures are reported as unavailable instead of being shown as zero balances
@@ -173,7 +177,7 @@ The bot auto-detects the address type and provides:
 
 ### Data and privacy
 
-The web application does not use cookies, analytics, local storage, session storage, accounts, or a wallet-connection library. It does not persist submitted addresses. Its in-memory rate limiter stores only bounded client identifiers and request timestamps for the configured window. Submitted public addresses are still sent to the configured Solana RPC, CoinGecko, DexScreener, or Etherscan as required for analysis. Operators should configure trusted proxy handling deliberately before relying on forwarded client IPs.
+The web application does not use cookies, analytics, local storage, session storage, accounts, or a wallet-connection library. It does not persist submitted addresses. CSV and JSON exports are generated locally in the browser. Share links place the address after `#`, which prevents it from being included in the HTTP request; the address remains visible in the URL and browser history, and opening the link only pre-fills the form until the user submits it. Its in-memory rate limiter stores only bounded client identifiers and request timestamps for the configured window. Submitted public addresses are still sent to the configured Solana RPC, CoinGecko, DexScreener, or Etherscan as required for analysis. Operators should configure trusted proxy handling deliberately before relying on forwarded client IPs.
 
 The Telegram bot stores Telegram user IDs, names, usernames, language codes, join/last-active timestamps, and interaction counters in `user_data.json`. The file is written atomically with owner-only permissions on supported systems, but it is still plaintext. Operators are responsible for access control, backups, retention, deletion requests, and an appropriate privacy notice.
 
@@ -198,7 +202,7 @@ npm run test:browser
 PYTHON=.venv/bin/python npm run test:production
 .venv/bin/python -m ruff check .
 .venv/bin/python -m bandit -q -r main.py services.py utils.py analyzer.py web_app.py --severity-level medium --confidence-level medium
-.venv/bin/python -m pip_audit -r requirements.txt
+.venv/bin/python -m pip_audit -r requirements.txt -r requirements-dev.txt
 npm audit --audit-level=high
 ```
 

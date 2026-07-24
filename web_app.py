@@ -89,6 +89,7 @@ class AnalyzeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     address: str = Field(min_length=1, max_length=128)
+    force_refresh: bool = False
 
 
 @app.middleware("http")
@@ -125,7 +126,7 @@ async def health():
 @app.post("/api/analyze")
 async def analyze(payload: AnalyzeRequest):
     try:
-        return await analyze_wallet(payload.address, force_refresh=False)
+        return await analyze_wallet(payload.address, force_refresh=payload.force_refresh)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ServiceError as exc:

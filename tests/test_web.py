@@ -91,6 +91,24 @@ async def test_analyze_returns_structured_result_and_privacy_headers(monkeypatch
     analyze.assert_awaited_once_with(SAMPLE_RESULT["address"], force_refresh=False)
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.asyncio
+async def test_analyze_can_force_a_fresh_provider_snapshot(monkeypatch):
+    import web_app
+
+    analyze = AsyncMock(return_value=SAMPLE_RESULT)
+    monkeypatch.setattr(web_app, "analyze_wallet", analyze)
+
+    response = await request(
+        web_app.app,
+        "POST",
+        "/api/analyze",
+        json={"address": SAMPLE_RESULT["address"], "force_refresh": True},
+    )
+
+    assert response.status_code == 200
+    analyze.assert_awaited_once_with(SAMPLE_RESULT["address"], force_refresh=True)
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert "default-src 'self'" in response.headers["content-security-policy"]

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { downloadText, sharedAddressFromHash, snapshotCsv } from './snapshot.js';
 
 const ethereumPattern = /^0x[a-fA-F0-9]{40}$/;
 const solanaPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
@@ -95,9 +96,46 @@ function InitialPanel() {
   );
 }
 
-function PortfolioResult({ result }) {
+function PortfolioResult({ result, loading, onRefresh, onCopyShare, onAnnounce }) {
+  const [tokenQuery, setTokenQuery] = useState('');
+  const [sortBy, setSortBy] = useState('value');
+  const [hideDust, setHideDust] = useState(false);
   const nativeAllocation = Math.max(0, 100 - result.token_summary.allocation_percent);
   const explorerUrl = safeHttpsUrl(result.explorer_url);
+  const visibleTokens = useMemo(() => {
+    const query = tokenQuery.trim().toLowerCase();
+    return result.tokens
+      .filter((token) => {
+        const matchesQuery = !query
+          || [token.symbol, token.name, token.mint]
+            .some((value) => String(value || '').toLowerCase().includes(query));
+        const isValuedDust = token.value_usd !== null
+          && token.value_usd !== undefined
+          && Number(token.value_usd) < 1;
+        return matchesQuery && (!hideDust || !isValuedDust);
+      })
+      .sort((left, right) => {
+        if (sortBy === 'symbol') return left.symbol.localeCompare(right.symbol);
+        if (sortBy === 'balance') return Number(right.balance || 0) - Number(left.balance || 0);
+        const leftValue = left.value_usd === null || left.value_usd === undefined ? -1 : Number(left.value_usd);
+        const rightValue = right.value_usd === null || right.value_usd === undefined ? -1 : Number(right.value_usd);
+        return rightValue - leftValue;
+      });
+  }, [hideDust, result.tokens, sortBy, tokenQuery]);
+
+  function exportCsv() {
+    downloadText('chainscope-holdings.csv', snapshotCsv(result), 'text/csv;charset=utf-8');
+    onAnnounce('CSV export prepared.');
+  }
+
+  function exportJson() {
+    downloadText(
+      'chainscope-snapshot.json',
+      `${JSON.stringify(result, null, 2)}\n`,
+      'application/json;charset=utf-8',
+    );
+    onAnnounce('JSON export prepared.');
+  }
 
   return (
     <section className="portfolio" aria-labelledby="portfolio-value">
@@ -106,17 +144,31 @@ function PortfolioResult({ result }) {
           <span className={`chain-tag chain-${result.chain}`}>{chainLabel(result.chain)}</span>
           <p className="address-line" title={result.address}>{shortenAddress(result.address)}</p>
         </div>
-        {explorerUrl && (
-          <a href={explorerUrl} target="_blank" rel="noreferrer" className="text-link">
-            {explorerLabel(result.chain)} <span aria-hidden="true">↗</span>
-          </a>
-        )}
+        <div className="portfolio-actions">
+          <button type="button" className="secondary-action" onClick={onRefresh} disabled={loading}>
+            {loading ? 'Refreshing…' : 'Refresh data'}
+          </button>
+          {explorerUrl && (
+            <a href={explorerUrl} target="_blank" rel="noreferrer" className="text-link">
+              {explorerLabel(result.chain)} <span aria-hidden="true">↗</span>
+            </a>
+          )}
+        </div>
       </header>
 
       <div className="value-block">
         <span>Estimated portfolio value</span>
         <h2 id="portfolio-value">{formatCurrency(result.total_value_usd)}</h2>
         <p>Read-only snapshot · Updated {new Date(result.updated_at).toLocaleString()}</p>
+      </div>
+
+      <div className="snapshot-actions" aria-label="Snapshot actions">
+        <p>The address in a share link stays in the URL fragment and is not analyzed until submitted.</p>
+        <div>
+          <button type="button" onClick={onCopyShare}>Copy share link</button>
+          <button type="button" onClick={exportCsv}>Export CSV</button>
+          <button type="button" onClick={exportJson}>Export JSON</button>
+        </div>
       </div>
 
       {result.warnings.length > 0 && (
@@ -182,9 +234,39 @@ function PortfolioResult({ result }) {
         </div>
         {result.tokens.length > 0 ? (
           <>
-            <p className="table-scroll-hint">Swipe the table to see price and market data →</p>
-            <div className="table-wrap">
-              <table>
+            <div className="holdings-toolbar">
+              <label>
+                <span>Search token holdings</span>
+                <input
+                  type="search"
+                  value={tokenQuery}
+                  onChange={(event) => setTokenQuery(event.target.value)}
+                  placeholder="Name, symbol, or mint"
+                />
+              </label>
+              <label>
+                <span>Sort holdings</span>
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                  <option value="value">Value: high to low</option>
+                  <option value="balance">Balance: high to low</option>
+                  <option value="symbol">Symbol: A–Z</option>
+                </select>
+              </label>
+              <label className="dust-toggle">
+                <input
+                  type="checkbox"
+                  checked={hideDust}
+                  onChange={(event) => setHideDust(event.target.checked)}
+                />
+                <span>Hide holdings under $1</span>
+              </label>
+            </div>
+            <p className="holdings-count">Showing {visibleTokens.length} of {result.tokens.length} holdings</p>
+            {visibleTokens.length > 0 ? (
+              <>
+                <p className="table-scroll-hint">Swipe the table to see price and market data →</p>
+                <div className="table-wrap">
+                  <table>
               <thead>
                 <tr>
                   <th scope="col">Asset</th>
@@ -196,7 +278,7 @@ function PortfolioResult({ result }) {
                 </tr>
               </thead>
               <tbody>
-                {result.tokens.map((token) => {
+                {visibleTokens.map((token) => {
                   const marketUrl = safeHttpsUrl(token.market_url);
                   return (
                     <tr key={token.mint}>
@@ -221,8 +303,12 @@ function PortfolioResult({ result }) {
                   );
                 })}
               </tbody>
-              </table>
-            </div>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="empty-holdings">No holdings match the current filters.</p>
+            )}
           </>
         ) : (
           <p className="empty-holdings">
@@ -236,8 +322,13 @@ function PortfolioResult({ result }) {
   );
 }
 
+function initialSharedAddress() {
+  const candidate = sharedAddressFromHash(window.location.hash);
+  return ethereumPattern.test(candidate) || solanaPattern.test(candidate) ? candidate : '';
+}
+
 export default function App() {
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(initialSharedAddress);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -250,26 +341,21 @@ export default function App() {
     return null;
   }, [address]);
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    const normalized = address.trim();
-    if (!ethereumPattern.test(normalized) && !solanaPattern.test(normalized)) {
-      setError('Enter a valid Solana or Ethereum wallet address.');
-      setStatus('Wallet address validation failed.');
-      return;
-    }
-
+  async function runAnalysis(normalized, forceRefresh = false) {
     setLoading(true);
     setError('');
-    setStatus('Analyzing public on-chain data.');
+    setStatus(forceRefresh ? 'Refreshing public on-chain data.' : 'Analyzing public on-chain data.');
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 25_000);
 
     try {
+      const payload = forceRefresh
+        ? { address: normalized, force_refresh: true }
+        : { address: normalized };
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: normalized }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
       const body = await response.json().catch(() => ({}));
@@ -284,10 +370,48 @@ export default function App() {
         ? 'Analysis timed out. Try again shortly.'
         : requestError.message;
       setError(message);
-      setStatus('Wallet analysis failed.');
+      setStatus(forceRefresh && result
+        ? 'Refresh failed. Previous snapshot retained.'
+        : 'Wallet analysis failed.');
     } finally {
       window.clearTimeout(timeout);
       setLoading(false);
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const normalized = address.trim();
+    if (!ethereumPattern.test(normalized) && !solanaPattern.test(normalized)) {
+      setError('Enter a valid Solana or Ethereum wallet address.');
+      setStatus('Wallet address validation failed.');
+      return;
+    }
+
+    await runAnalysis(normalized);
+  }
+
+  async function handleRetry() {
+    const normalized = address.trim();
+    if (loading || (!ethereumPattern.test(normalized) && !solanaPattern.test(normalized))) return;
+    await runAnalysis(normalized);
+  }
+
+  async function handleRefresh() {
+    if (!result || loading) return;
+    await runAnalysis(result.address, true);
+  }
+
+  async function handleCopyShare() {
+    if (!result) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}#address=${encodeURIComponent(result.address)}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setError('');
+      setStatus('Share link copied. Opening it pre-fills the public address but does not analyze automatically.');
+    } catch {
+      setError('The share link could not be copied. Check browser clipboard permissions.');
+      setStatus('Share link copy failed.');
     }
   }
 
@@ -338,11 +462,36 @@ export default function App() {
               <p id="wallet-help">Public address only. Never enter a seed phrase or private key.</p>
               <span>No sign-in · No tracking · No storage</span>
             </div>
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {error && (
+              <div className="form-error" role="alert">
+                <span>{error}</span>
+                {(ethereumPattern.test(address.trim()) || solanaPattern.test(address.trim())) && (
+                  <button type="button" onClick={handleRetry} disabled={loading}>Retry analysis</button>
+                )}
+              </div>
+            )}
           </form>
         </section>
 
-        {result ? <PortfolioResult result={result} /> : <InitialPanel />}
+        {loading && (
+          <section className="loading-panel" aria-label="Analysis in progress" aria-busy="true">
+            <span className="eyebrow">READING PUBLIC DATA</span>
+            <strong>{result ? 'Refreshing the latest snapshot…' : 'Building the wallet snapshot…'}</strong>
+            <div aria-hidden="true"><i /><i /><i /></div>
+          </section>
+        )}
+
+        {result ? (
+          <PortfolioResult
+            result={result}
+            loading={loading}
+            onRefresh={handleRefresh}
+            onCopyShare={handleCopyShare}
+            onAnnounce={setStatus}
+          />
+        ) : (
+          <InitialPanel />
+        )}
       </main>
 
       <footer>
