@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
 ETHEREUM_RPC_URL = os.getenv("ETHEREUM_RPC_URL", "https://ethereum-rpc.publicnode.com")
+COINBASE_SOL_PRICE_API = "https://api.coinbase.com/v2/prices/SOL-USD/spot"
+COINBASE_ETH_PRICE_API = "https://api.coinbase.com/v2/prices/ETH-USD/spot"
 SOL_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd"
 ETH_PRICE_API = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd"
 DEXSCREENER_TOKEN_PAIRS_API = "https://api.dexscreener.com/token-pairs/v1/solana"
@@ -272,7 +274,8 @@ async def get_sol_balance(
 
 async def _get_asset_price(
     asset: str,
-    url: str,
+    coinbase_url: str,
+    coingecko_url: str,
     session: Optional[aiohttp.ClientSession],
     force_refresh: bool,
 ) -> float:
@@ -281,13 +284,31 @@ async def _get_asset_price(
         return cached
 
     async def fetch(active_session: aiohttp.ClientSession) -> float:
-        data = await _request_json(active_session, "GET", url, operation=f"{asset.upper()} price")
-        value = data.get(asset, {}).get("usd") if isinstance(data, dict) else None
-        if not isinstance(value, (int, float)) or value <= 0:
-            raise ServiceError(f"{asset.upper()} price", "returned malformed data")
-        price = float(value)
-        cache_service.set(cache_key, price)
-        return price
+        providers = (
+            ("Coinbase", coinbase_url),
+            ("CoinGecko", coingecko_url),
+        )
+        for provider, url in providers:
+            try:
+                data = await _request_json(
+                    active_session,
+                    "GET",
+                    url,
+                    operation=f"{provider} {asset.upper()} price",
+                )
+            except ServiceError:
+                continue
+
+            if provider == "Coinbase":
+                value = data.get("data", {}).get("amount") if isinstance(data, dict) else None
+            else:
+                value = data.get(asset, {}).get("usd") if isinstance(data, dict) else None
+            price = _number(value)
+            if price is not None and price > 0:
+                cache_service.set(cache_key, price)
+                return price
+
+        raise ServiceError(f"{asset.upper()} price", "is unavailable from all providers")
 
     return await _run_with_session(session, fetch)
 
@@ -296,14 +317,26 @@ async def get_sol_price(
     session: Optional[aiohttp.ClientSession] = None,
     force_refresh: bool = False,
 ) -> float:
-    return await _get_asset_price("solana", SOL_PRICE_API, session, force_refresh)
+    return await _get_asset_price(
+        "solana",
+        COINBASE_SOL_PRICE_API,
+        SOL_PRICE_API,
+        session,
+        force_refresh,
+    )
 
 
 async def get_eth_price(
     session: Optional[aiohttp.ClientSession] = None,
     force_refresh: bool = False,
 ) -> float:
-    return await _get_asset_price("ethereum", ETH_PRICE_API, session, force_refresh)
+    return await _get_asset_price(
+        "ethereum",
+        COINBASE_ETH_PRICE_API,
+        ETH_PRICE_API,
+        session,
+        force_refresh,
+    )
 
 
 async def get_token_accounts(

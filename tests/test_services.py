@@ -45,6 +45,34 @@ async def test_ethereum_api_error_is_not_reported_as_zero(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_native_price_prefers_coinbase_spot(monkeypatch):
+    request_json = AsyncMock(
+        return_value={"data": {"amount": "1855.845", "base": "ETH", "currency": "USD"}}
+    )
+    monkeypatch.setattr(services, "_request_json", request_json)
+
+    assert await services.get_eth_price(session=object(), force_refresh=True) == 1855.845
+    assert request_json.await_args.args[2] == services.COINBASE_ETH_PRICE_API
+
+
+@pytest.mark.asyncio
+async def test_native_price_falls_back_when_primary_is_rate_limited(monkeypatch):
+    request_json = AsyncMock(
+        side_effect=[
+            services.ServiceError("SOLANA price", "is rate-limited or unavailable"),
+            {"solana": {"usd": 73.86}},
+        ]
+    )
+    monkeypatch.setattr(services, "_request_json", request_json)
+
+    assert await services.get_sol_price(session=object(), force_refresh=True) == 73.86
+    assert [call.args[2] for call in request_json.await_args_list] == [
+        services.COINBASE_SOL_PRICE_API,
+        services.SOL_PRICE_API,
+    ]
+
+
+@pytest.mark.asyncio
 async def test_solana_rpc_error_is_not_reported_as_zero(monkeypatch):
     request_json = AsyncMock(return_value={"jsonrpc": "2.0", "id": 1, "error": {"code": -32005}})
     monkeypatch.setattr(services, "_request_json", request_json)
