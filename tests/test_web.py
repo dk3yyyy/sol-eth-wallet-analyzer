@@ -139,13 +139,13 @@ async def test_invalid_address_returns_actionable_422(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_provider_errors_are_sanitized(monkeypatch):
+async def test_provider_errors_are_sanitized_but_diagnosable(monkeypatch, caplog):
     import web_app
 
     monkeypatch.setattr(
         web_app,
         "analyze_wallet",
-        AsyncMock(side_effect=ServiceError("secret provider response")),
+        AsyncMock(side_effect=ServiceError("Ethereum balance", "returned HTTP 403")),
     )
 
     response = await request(
@@ -159,7 +159,8 @@ async def test_provider_errors_are_sanitized(monkeypatch):
     assert response.json() == {
         "detail": "Wallet data providers are temporarily unavailable. Try again shortly."
     }
-    assert "secret provider response" not in response.text
+    assert "returned HTTP 403" not in response.text
+    assert "Wallet data provider unavailable: Ethereum balance returned HTTP 403" in caplog.text
 
 
 @pytest.mark.asyncio

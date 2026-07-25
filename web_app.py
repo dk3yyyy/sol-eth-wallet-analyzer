@@ -142,7 +142,7 @@ async def analyze(payload: AnalyzeRequest):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ServiceError as exc:
-        logger.warning("Wallet data provider unavailable")
+        logger.warning("Wallet data provider unavailable: %s", exc)
         raise HTTPException(
             status_code=503,
             detail="Wallet data providers are temporarily unavailable. Try again shortly.",
