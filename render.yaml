@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: chainscope-wallet-analyzer
+    runtime: docker
+    repo: https://github.com/dk3yyyy/sol-eth-wallet-analyzer
+    branch: main
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: uvicorn web_app:app --host 0.0.0.0 --port 10000
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
