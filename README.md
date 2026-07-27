@@ -2,6 +2,10 @@
 
 A read-only web application and async Telegram bot for inspecting public Solana and Ethereum addresses. It reports native balances and USD values, with detailed SPL-token portfolio analytics for Solana wallets—without connecting a wallet or requesting a signature.
 
+## 🖥️ Product Preview
+
+![ChainScope landing page showing the read-only Solana and Ethereum wallet analysis interface](docs/landing-page.webp)
+
 ## ✨ Features
 
 ### 🎯 **Core Features**
