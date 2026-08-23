@@ -6,6 +6,10 @@ A read-only web application and async Telegram bot for inspecting public Solana 
 
 ![ChainScope landing page showing the read-only Solana and Ethereum wallet analysis interface](docs/landing-page.webp)
 
+## 🌐 Live Demo
+
+Try the hosted web application at [**chainscope-wallet-analyzer.onrender.com**](https://chainscope-wallet-analyzer.onrender.com)
+
 ## ✨ Features
 
 ### 🎯 **Core Features**
